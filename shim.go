@@ -2,14 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
 )
 
 var LogFilePath = "/var/log/sendmail-shim.log.json"
 
 type LogEntry struct {
+	UserID    string   `json:"uid"`
+	Username  string   `json:"username,omitempty"`
 	Arguments []string `json:"arguments"`
 	Body      string   `json:"body"`
 }
@@ -23,8 +27,18 @@ func main() {
 
 	// build JSON
 	entry := LogEntry{
-		Arguments: os.Args,
+		Arguments: os.Args[1:],
 		Body:      string(body),
+	}
+
+	// get calling user ID and name
+	u, err := user.Current()
+	if err == nil {
+		entry.UserID = u.Uid
+		entry.Username = u.Username
+	} else {
+		// just fill in the user ID
+		entry.UserID = fmt.Sprintf("%d", os.Getuid())
 	}
 
 	// write out the JSON object on a line by itself
