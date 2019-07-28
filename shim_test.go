@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
 
@@ -100,19 +101,41 @@ func TestEncodeJSON(t *testing.T) {
 
 type ErrorReader struct{}
 
-
 func (_ ErrorReader) Read(_ []byte) (int, error) {
 	return 0, fmt.Errorf("oh no")
+}
+
+func ConstUsername() (string, string) {
+	return "123", "foobar"
 }
 
 func TestPopulateEntry(t *testing.T) {
 	// test stdin read failure
 	e1 := LogEntry{}
-	lerr := PopulateEntry(&e1, ErrorReader{})
+	lerr := PopulateEntry(&e1, ErrorReader{}, ConstUsername)
 	if lerr == nil {
 		t.Fatal("expected an error")
 	}
 	if lerr.Tag != "stdin-failed" {
 		t.Fatalf("unexpected tag %q", lerr.Tag)
+	}
+
+	// test entry population
+	e2 := LogEntry{}
+	lerr = PopulateEntry(&e2, strings.NewReader("hello"), ConstUsername)
+	if lerr != nil {
+		t.Fatal(lerr.Err)
+	}
+	if e2.UserID != "123" {
+		t.Errorf("bad user ID %q", e2.UserID)
+	}
+	if e2.Username != "foobar" {
+		t.Errorf("bad username %q", e2.Username)
+	}
+	if e2.Body != "hello" {
+		t.Errorf("bad body %q", e2.Body)
+	}
+	if e2.Arguments == nil || len(e2.Arguments) == 0 {
+		t.Errorf("not enough arguments")
 	}
 }

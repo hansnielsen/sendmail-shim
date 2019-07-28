@@ -26,6 +26,20 @@ type LogError struct {
 	Tag string
 }
 
+// Returns (uid, username)
+type UsernameFunc func() (string, string)
+
+func GetUsername() (uid string, username string) {
+	// get calling user ID and name
+	u, err := user.Current()
+	if err == nil {
+		return u.Uid, u.Username
+	}
+
+	// just return the user ID
+	return fmt.Sprintf("%d", os.Getuid()), ""
+}
+
 func OpenLogFile(path string) (*os.File, *LogError) {
 	// write out the JSON object on a line by itself
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -38,19 +52,14 @@ func OpenLogFile(path string) (*os.File, *LogError) {
 	return f, nil
 }
 
-func PopulateEntry(e *LogEntry, r io.Reader) *LogError {
+func PopulateEntry(e *LogEntry, r io.Reader, uf UsernameFunc) *LogError {
 	// set the time
 	e.Time = time.Now().UTC().Format(time.RFC3339)
 
-	// get calling user ID and name
-	u, err := user.Current()
-	if err == nil {
-		e.UserID = u.Uid
-		e.Username = u.Username
-	} else {
-		// just fill in the user ID
-		e.UserID = fmt.Sprintf("%d", os.Getuid())
-	}
+	// populate the uid and username
+	uid, username := uf()
+	e.UserID = uid
+	e.Username = username
 
 	// just use the full arguments list minus the program name
 	e.Arguments = os.Args[1:]
@@ -88,9 +97,9 @@ func EmitLog() *LogError {
 	}
 	defer f.Close()
 
-	// build JSON
+	// build the log entry
 	entry := LogEntry{}
-	err = PopulateEntry(&entry, os.Stdin)
+	err = PopulateEntry(&entry, os.Stdin, GetUsername)
 	if err != nil {
 		return err
 	}
