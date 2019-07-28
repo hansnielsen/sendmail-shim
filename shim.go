@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-var LogFilePath = "/var/log/sendmail-shim.log.json"
-
 type LogEntry struct {
 	Time      string   `json:"time"`
 	UserID    string   `json:"uid"`
@@ -47,7 +45,6 @@ func GetTime() string {
 }
 
 func OpenLogFile(path string) (*os.File, *LogError) {
-	// write out the JSON object on a line by itself
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, &LogError{
@@ -58,20 +55,29 @@ func OpenLogFile(path string) (*os.File, *LogError) {
 	return f, nil
 }
 
-func PopulateEntry(e *LogEntry, r io.Reader, uf UsernameFunc, tf TimeFunc) *LogError {
+type EmailLogger struct {
+	Args    []string
+	Body    io.Reader
+	User    UsernameFunc
+	Time    TimeFunc
+	Writer  io.Writer
+	LogPath string // used if there's no Writer
+}
+
+func (l *EmailLogger) Populate(e *LogEntry) *LogError {
 	// set the time
-	e.Time = tf()
+	e.Time = l.Time()
 
 	// populate the uid and username
-	uid, username := uf()
+	uid, username := l.User()
 	e.UserID = uid
 	e.Username = username
 
 	// just use the full arguments list minus the program name
-	e.Arguments = os.Args[1:]
+	e.Arguments = l.Args
 
 	// read stdin
-	body, err := ioutil.ReadAll(r)
+	body, err := ioutil.ReadAll(l.Body)
 	if err != nil {
 		return &LogError{
 			fmt.Errorf("couldn't read stdin: %v", err),
@@ -83,8 +89,8 @@ func PopulateEntry(e *LogEntry, r io.Reader, uf UsernameFunc, tf TimeFunc) *LogE
 	return nil
 }
 
-func EncodeJSON(f io.Writer, e LogEntry) *LogError {
-	j := json.NewEncoder(f)
+func (l *EmailLogger) EncodeJSON(e LogEntry) *LogError {
+	j := json.NewEncoder(l.Writer)
 	err := j.Encode(e)
 	if err != nil {
 		return &LogError{
@@ -95,23 +101,29 @@ func EncodeJSON(f io.Writer, e LogEntry) *LogError {
 	return nil
 }
 
-func EmitLog() *LogError {
-	// open the log file
-	f, err := OpenLogFile(LogFilePath)
-	if err != nil {
-		return err
+func (l *EmailLogger) Emit() *LogError {
+	if l.Writer == nil {
+		// open the log file if there's no writer
+		f, err := OpenLogFile(l.LogPath)
+		if err != nil {
+			return err
+		}
+		l.Writer = f
+		defer func() {
+			l.Writer = nil
+			f.Close()
+		}()
 	}
-	defer f.Close()
 
 	// build the log entry
 	entry := LogEntry{}
-	err = PopulateEntry(&entry, os.Stdin, GetUsername, GetTime)
+	err := l.Populate(&entry)
 	if err != nil {
 		return err
 	}
 
 	// write out JSON
-	err = EncodeJSON(f, entry)
+	err = l.EncodeJSON(entry)
 	if err != nil {
 		return err
 	}
@@ -124,7 +136,14 @@ func EmitLog() *LogError {
 }
 
 func main() {
-	err := EmitLog()
+	l := EmailLogger{
+		LogPath: "/var/log/sendmail-shim.log.json",
+		Args:    os.Args[1:],
+		Body:    os.Stdin,
+		User:    GetUsername,
+		Time:    GetTime,
+	}
+	err := l.Emit()
 	if err != nil {
 		// emit failure metrics here if you want!
 		//

@@ -71,7 +71,10 @@ func (_ ErrorWriter) Write(_ []byte) (int, error) {
 
 func TestEncodeJSON(t *testing.T) {
 	// test JSON encoding errors
-	lerr := EncodeJSON(ErrorWriter{}, LogEntry{})
+	l1 := EmailLogger{
+		Writer: ErrorWriter{},
+	}
+	lerr := l1.EncodeJSON(LogEntry{})
 	if lerr == nil {
 		t.Fatal("expected an error")
 	}
@@ -89,7 +92,10 @@ func TestEncodeJSON(t *testing.T) {
 	}
 	expected := "{\"time\":\"2009-11-10T23:00:00Z\",\"uid\":\"123\",\"username\":\"foo\",\"arguments\":[\"yay\",\"asdf\"],\"body\":\"stuff\"}\n"
 	b := bytes.Buffer{}
-	lerr = EncodeJSON(&b, e)
+	l2 := EmailLogger{
+		Writer: &b,
+	}
+	lerr = l2.EncodeJSON(e)
 	if lerr != nil {
 		t.Fatal(lerr.Err)
 	}
@@ -115,8 +121,13 @@ func ConstTime() string {
 
 func TestPopulateEntry(t *testing.T) {
 	// test stdin read failure
+	l1 := EmailLogger{
+		Body: ErrorReader{},
+		User: ConstUsername,
+		Time: ConstTime,
+	}
 	e1 := LogEntry{}
-	lerr := PopulateEntry(&e1, ErrorReader{}, ConstUsername, ConstTime)
+	lerr := l1.Populate(&e1)
 	if lerr == nil {
 		t.Fatal("expected an error")
 	}
@@ -125,8 +136,14 @@ func TestPopulateEntry(t *testing.T) {
 	}
 
 	// test entry population
+	l2 := EmailLogger{
+		Body: strings.NewReader("hello"),
+		User: ConstUsername,
+		Time: ConstTime,
+		Args: []string{"yay", "stuff"},
+	}
 	e2 := LogEntry{}
-	lerr = PopulateEntry(&e2, strings.NewReader("hello"), ConstUsername, ConstTime)
+	lerr = l2.Populate(&e2)
 	if lerr != nil {
 		t.Fatal(lerr.Err)
 	}
@@ -142,7 +159,37 @@ func TestPopulateEntry(t *testing.T) {
 	if e2.Body != "hello" {
 		t.Errorf("bad body %q", e2.Body)
 	}
-	if e2.Arguments == nil || len(e2.Arguments) == 0 {
-		t.Errorf("not enough arguments")
+	if a := e2.Arguments; len(a) != 2 || a[0] != "yay" || a[1] != "stuff" {
+		t.Errorf("bad arguments %v", e2.Arguments)
+	}
+}
+
+func TestEmit(t *testing.T) {
+	dir, err := ioutil.TempDir("", "emit-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	n := path.Join(dir, "test.log.json")
+
+	l := EmailLogger{
+		LogPath: n,
+		Args:    []string{"fro", "bozz"},
+		Body:    strings.NewReader("hello\nworld\n"),
+		User:    ConstUsername,
+		Time:    ConstTime,
+	}
+	lerr := l.Emit()
+	if lerr != nil {
+		t.Fatal(err)
+	}
+
+	b, err := ioutil.ReadFile(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "{\"time\":\"2009-11-10T23:00:00Z\",\"uid\":\"123\",\"username\":\"foobar\",\"arguments\":[\"fro\",\"bozz\"],\"body\":\"hello\\nworld\\n\"}\n"
+	if string(b) != expected {
+		t.Fatalf("got %q, expected %q", b, expected)
 	}
 }
