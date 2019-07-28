@@ -38,7 +38,7 @@ func OpenLogFile(path string) (*os.File, *LogError) {
 	return f, nil
 }
 
-func PopulateEntry(e *LogEntry) *LogError {
+func PopulateEntry(e *LogEntry, r io.Reader) *LogError {
 	// set the time
 	e.Time = time.Now().UTC().Format(time.RFC3339)
 
@@ -56,7 +56,7 @@ func PopulateEntry(e *LogEntry) *LogError {
 	e.Arguments = os.Args[1:]
 
 	// read stdin
-	body, err := ioutil.ReadAll(os.Stdin)
+	body, err := ioutil.ReadAll(r)
 	if err != nil {
 		return &LogError{
 			fmt.Errorf("couldn't read stdin: %v", err),
@@ -90,7 +90,7 @@ func EmitLog() *LogError {
 
 	// build JSON
 	entry := LogEntry{}
-	err = PopulateEntry(&entry)
+	err = PopulateEntry(&entry, os.Stdin)
 	if err != nil {
 		return err
 	}

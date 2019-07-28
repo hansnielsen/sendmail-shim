@@ -97,3 +97,22 @@ func TestEncodeJSON(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, actual)
 	}
 }
+
+type ErrorReader struct{}
+
+
+func (_ ErrorReader) Read(_ []byte) (int, error) {
+	return 0, fmt.Errorf("oh no")
+}
+
+func TestPopulateEntry(t *testing.T) {
+	// test stdin read failure
+	e1 := LogEntry{}
+	lerr := PopulateEntry(&e1, ErrorReader{})
+	if lerr == nil {
+		t.Fatal("expected an error")
+	}
+	if lerr.Tag != "stdin-failed" {
+		t.Fatalf("unexpected tag %q", lerr.Tag)
+	}
+}
