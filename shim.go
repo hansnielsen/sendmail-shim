@@ -40,6 +40,12 @@ func GetUsername() (uid string, username string) {
 	return fmt.Sprintf("%d", os.Getuid()), ""
 }
 
+type TimeFunc func() string
+
+func GetTime() string {
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
 func OpenLogFile(path string) (*os.File, *LogError) {
 	// write out the JSON object on a line by itself
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -52,9 +58,9 @@ func OpenLogFile(path string) (*os.File, *LogError) {
 	return f, nil
 }
 
-func PopulateEntry(e *LogEntry, r io.Reader, uf UsernameFunc) *LogError {
+func PopulateEntry(e *LogEntry, r io.Reader, uf UsernameFunc, tf TimeFunc) *LogError {
 	// set the time
-	e.Time = time.Now().UTC().Format(time.RFC3339)
+	e.Time = tf()
 
 	// populate the uid and username
 	uid, username := uf()
@@ -99,7 +105,7 @@ func EmitLog() *LogError {
 
 	// build the log entry
 	entry := LogEntry{}
-	err = PopulateEntry(&entry, os.Stdin, GetUsername)
+	err = PopulateEntry(&entry, os.Stdin, GetUsername, GetTime)
 	if err != nil {
 		return err
 	}

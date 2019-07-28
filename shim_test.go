@@ -109,10 +109,14 @@ func ConstUsername() (string, string) {
 	return "123", "foobar"
 }
 
+func ConstTime() string {
+	return "2009-11-10T23:00:00Z"
+}
+
 func TestPopulateEntry(t *testing.T) {
 	// test stdin read failure
 	e1 := LogEntry{}
-	lerr := PopulateEntry(&e1, ErrorReader{}, ConstUsername)
+	lerr := PopulateEntry(&e1, ErrorReader{}, ConstUsername, ConstTime)
 	if lerr == nil {
 		t.Fatal("expected an error")
 	}
@@ -122,9 +126,12 @@ func TestPopulateEntry(t *testing.T) {
 
 	// test entry population
 	e2 := LogEntry{}
-	lerr = PopulateEntry(&e2, strings.NewReader("hello"), ConstUsername)
+	lerr = PopulateEntry(&e2, strings.NewReader("hello"), ConstUsername, ConstTime)
 	if lerr != nil {
 		t.Fatal(lerr.Err)
+	}
+	if e2.Time != "2009-11-10T23:00:00Z" {
+		t.Errorf("bad time %q", e2.Time)
 	}
 	if e2.UserID != "123" {
 		t.Errorf("bad user ID %q", e2.UserID)
