@@ -110,12 +110,20 @@ func EmitLog() *LogError {
 		return err
 	}
 
+	// emit success metrics here if you want!
+	//
+	// metrics.Increment("sendmail-shim.success", 1, map[string]string{"uid": entry.UserID})
+
 	return nil
 }
 
 func main() {
 	err := EmitLog()
 	if err != nil {
+		// emit failure metrics here if you want!
+		//
+		// metrics.Increment("sendmail-shim.error", 1, map[string]string{"reason": err.Tag})
+
 		log.Fatal(err.Err)
 	}
 }
