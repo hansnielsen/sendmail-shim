@@ -7,11 +7,13 @@ import (
 	"log"
 	"os"
 	"os/user"
+	"time"
 )
 
 var LogFilePath = "/var/log/sendmail-shim.log.json"
 
 type LogEntry struct {
+	Time      string   `json:"time"`
 	UserID    string   `json:"uid"`
 	Username  string   `json:"username,omitempty"`
 	Arguments []string `json:"arguments"`
@@ -29,6 +31,7 @@ func main() {
 	entry := LogEntry{
 		Arguments: os.Args[1:],
 		Body:      string(body),
+		Time:      time.Now().UTC().Format(time.RFC3339),
 	}
 
 	// get calling user ID and name
