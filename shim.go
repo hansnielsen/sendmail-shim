@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -20,7 +21,24 @@ type LogEntry struct {
 	Body      string   `json:"body"`
 }
 
-func PopulateEntry(e *LogEntry) error {
+type LogError struct {
+	Err error
+	Tag string
+}
+
+func OpenLogFile(path string) (*os.File, *LogError) {
+	// write out the JSON object on a line by itself
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, &LogError{
+			fmt.Errorf("couldn't open log file: %v", err),
+			"open-log-file",
+		}
+	}
+	return f, nil
+}
+
+func PopulateEntry(e *LogEntry) *LogError {
 	// set the time
 	e.Time = time.Now().UTC().Format(time.RFC3339)
 
@@ -40,32 +58,47 @@ func PopulateEntry(e *LogEntry) error {
 	// read stdin
 	body, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
-		return fmt.Errorf("couldn't read stdin: %v", err)
+		return &LogError{
+			fmt.Errorf("couldn't read stdin: %v", err),
+			"stdin-failed",
+		}
 	}
 	e.Body = string(body)
 
 	return nil
 }
 
-func EmitLog() error {
+func EncodeJSON(f io.Writer, e LogEntry) *LogError {
+	j := json.NewEncoder(f)
+	err := j.Encode(e)
+	if err != nil {
+		return &LogError{
+			fmt.Errorf("couldn't encode JSON: %v", err),
+			"json-encoding",
+		}
+	}
+	return nil
+}
+
+func EmitLog() *LogError {
+	// open the log file
+	f, err := OpenLogFile(LogFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
 	// build JSON
 	entry := LogEntry{}
-	err := PopulateEntry(&entry)
+	err = PopulateEntry(&entry)
 	if err != nil {
 		return err
 	}
 
-	// write out the JSON object on a line by itself
-	f, err := os.OpenFile(LogFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	// write out JSON
+	err = EncodeJSON(f, entry)
 	if err != nil {
-		return fmt.Errorf("couldn't open log file: %v", err)
-	}
-	defer f.Close()
-
-	j := json.NewEncoder(f)
-	err = j.Encode(entry)
-	if err != nil {
-		return fmt.Errorf("couldn't encode JSON: %v", err)
+		return err
 	}
 
 	return nil
@@ -74,6 +107,6 @@ func EmitLog() error {
 func main() {
 	err := EmitLog()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Err)
 	}
 }
